@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { HomeSkeleton } from '@/components/HomeSkeleton';
 
 const pills = ['Chill', 'Focus', 'Commute', 'Gaming', 'Energize', 'Party', 'Feel good', 'Romance', 'Workout', 'Sleep', 'Sad', 'Happy', 'Nostalgia', 'Acoustic', 'Pop', 'Rock'];
+const FALLBACK_COVER = 'https://f.top4top.io/p_3733w0g4e0.jpg';
 
 export default function Home() {
   const [heroTracks, setHeroTracks] = useState<Track[]>([]);
@@ -242,32 +243,35 @@ export default function Home() {
           {speedDialTracks.length > 0 && (
             <div className="px-4">
               <h2 className="text-2xl font-bold text-white mb-4">Speed dial</h2>
-              <div className="flex overflow-x-auto no-scrollbar gap-4 snap-x snap-mandatory scroll-smooth pb-4">
-                {Array.from({ length: Math.ceil(speedDialTracks.length / 9) }).map((_, i) => {
-                  const chunk = speedDialTracks.slice(i * 9, i * 9 + 9);
+              <div className="grid grid-cols-2 gap-3">
+                {speedDialTracks.slice(0, 12).filter((track) => track?.videoId).map((track, index) => {
+                  const imageSrc = getHighResImage(track.thumbnails?.[track.thumbnails.length - 1]?.url, 400) || FALLBACK_COVER;
+                  const artistName = Array.isArray(track.artist) ? track.artist.map((a) => a.name).join(', ') : track.artist?.name || 'Unknown Artist';
+
                   return (
-                    <motion.div 
-                      key={`speeddial-chunk-${i}`}
-                      initial={{ opacity: 0, x: 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
+                    <motion.button
+                      key={`speeddial-${track.videoId}-${index}`}
+                      initial={{ opacity: 0, y: 12 }}
+                      whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, amount: 0.1 }}
-                      transition={{ duration: 0.3, ease: "easeOut" }}
-                      className="w-[85vw] sm:w-[400px] shrink-0 snap-center grid grid-cols-3 gap-2"
+                      transition={{ duration: 0.25, ease: 'easeOut', delay: index * 0.02 }}
+                      className="w-full text-left bg-white/5 backdrop-blur-lg rounded-2xl p-2 border border-white/10 hover:bg-white/10 transition-colors"
+                      onClick={() => playTrack(track, speedDialTracks, 'similar')}
                     >
-                      {chunk.map((track, j) => (
-                        <div 
-                          key={`speeddial-${track.videoId}-${j}`}
-                          className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group hover:scale-[1.02] active:scale-[0.98] transition-transform duration-200"
-                          onClick={() => playTrack(track, speedDialTracks, 'similar')}
-                        >
-                          <Image src={getHighResImage(track.thumbnails?.[track.thumbnails.length - 1]?.url, 200)} alt={track.name} fill sizes="64px" className="object-cover" />
-                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
-                          <div className="absolute bottom-2 left-2 right-2">
-                            <MarqueeText text={track.name} className="text-white text-xs font-medium drop-shadow-md" />
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
+                      <div className="relative w-full aspect-square overflow-hidden rounded-xl">
+                        <Image
+                          src={imageSrc}
+                          alt={track.name || 'Track cover'}
+                          fill
+                          sizes="(max-width: 640px) 50vw, 240px"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="mt-2 space-y-0.5">
+                        <p className="text-sm font-semibold text-white truncate">{track.name || 'Unknown Track'}</p>
+                        <p className="text-xs text-white/60 truncate">{artistName}</p>
+                      </div>
+                    </motion.button>
                   );
                 })}
               </div>
