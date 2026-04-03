@@ -1,54 +1,66 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
+  prompt(): Promise<void>;
+  userChoice: Promise<{
     outcome: 'accepted' | 'dismissed';
     platform: string;
   }>;
-  prompt(): Promise<void>;
 }
 
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setIsInstallable(true);
+    const displayModeQuery = window.matchMedia('(display-mode: standalone)');
+
+    const syncInstalledState = () => {
+      const installed = displayModeQuery.matches;
+      setIsInstalled(installed);
+      if (installed) {
+        deferredPromptRef.current = null;
+        setCanInstall(false);
+      }
     };
 
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      deferredPromptRef.current = event as BeforeInstallPromptEvent;
+      setCanInstall(!displayModeQuery.matches);
+    };
+
+    syncInstalledState();
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    displayModeQuery.addEventListener('change', syncInstalledState);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      displayModeQuery.removeEventListener('change', syncInstalledState);
     };
   }, []);
 
-  const installPWA = async () => {
-    if (!deferredPrompt) {
-      // Check if it's iOS
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      if (isIOS) {
-        alert('Untuk menginstal di iOS: Ketuk tombol Share (Bagikan) di bawah, lalu pilih "Add to Home Screen" (Tambahkan ke Layar Utama).');
-      } else {
-        alert('Aplikasi sudah diinstal atau browser Anda tidak mendukung instalasi PWA otomatis. Anda bisa menginstalnya melalui menu browser (Tambahkan ke Layar Utama).');
-      }
+  const installPWA = useCallback(async () => {
+    const deferredPrompt = deferredPromptRef.current;
+    if (!deferredPrompt || isInstalled) {
       return;
     }
 
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-      setIsInstallable(false);
-    }
-  };
+    await deferredPrompt.prompt();
+    const choiceResult = await deferredPrompt.userChoice;
 
-  return { isInstallable, installPWA };
+    if (choiceResult.outcome === 'accepted') {
+      deferredPromptRef.current = null;
+      setCanInstall(false);
+    }
+  }, [isInstalled]);
+
+  return {
+    canInstall: canInstall && !isInstalled,
+    installPWA,
+  };
 }
