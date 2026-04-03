@@ -111,7 +111,7 @@ export function Player() {
           const time = await playerRef.current.getCurrentTime();
           setProgress(time || 0);
         }
-      }, 1000);
+      }, 200);
     }
     return () => clearInterval(interval);
   }, [isPlaying, setProgress]);
@@ -336,7 +336,12 @@ export function Player() {
                 )}
                 {showLyrics ? (
                   <div className="flex-1 pb-8 z-10">
-                    <LyricsClient track={currentTrack} />
+                    <LyricsClient
+                      track={currentTrack}
+                      currentTime={progress}
+                      duration={duration}
+                      isPlaying={isPlaying}
+                    />
                   </div>
                 ) : (
                   <AnimatePresence mode="wait">
