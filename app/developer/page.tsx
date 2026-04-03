@@ -8,7 +8,7 @@ import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 export default function DeveloperPage() {
   const router = useRouter();
-  const { isInstallable, installPWA } = usePWAInstall();
+  const { canInstall, installPWA } = usePWAInstall();
 
   return (
     <main className="min-h-screen pb-24">
@@ -87,14 +87,18 @@ export default function DeveloperPage() {
             </div>
           </a>
 
-          {/* Download APK / Install PWA */}
-          <button 
-            onClick={installPWA}
-            className="w-full max-w-sm flex items-center justify-center gap-3 bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white font-medium py-4 px-6 rounded-2xl transition-colors border border-white/5"
-          >
-            <Download className="w-5 h-5" />
-            <span>Download APK</span>
-          </button>
+          {/* Install PWA (optional) */}
+          {canInstall && (
+            <button
+              onClick={() => {
+                void installPWA();
+              }}
+              className="w-full max-w-sm flex items-center justify-center gap-3 bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white font-medium py-4 px-6 rounded-2xl transition-colors border border-white/5"
+            >
+              <Download className="w-5 h-5" />
+              <span>Install App</span>
+            </button>
+          )}
         </motion.div>
       </div>
 
