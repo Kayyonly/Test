@@ -4,9 +4,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { usePlayerStore } from '@/lib/store';
 
+interface LyricsTrack {
+  videoId: string;
+}
+
 interface LyricLine {
   time: number;
   text: string;
+}
+
+interface LyricsClientProps {
+  track: LyricsTrack | null;
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
 }
 
 const FALLBACK_LYRICS = 'Lirik tidak tersedia';
@@ -122,7 +133,6 @@ export default function LyricsClient() {
   const currentTime = usePlayerStore((state) => state.progress);
   const duration = usePlayerStore((state) => state.duration);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
-
   const [lyrics, setLyrics] = useState(FALLBACK_LYRICS);
   const [isLoading, setIsLoading] = useState(false);
   const lineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
