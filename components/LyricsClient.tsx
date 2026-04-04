@@ -2,25 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-
-interface LyricsTrack {
-  videoId: string;
-}
+import { usePlayerStore } from '@/lib/store';
 
 interface LyricLine {
   time: number;
   text: string;
 }
 
-interface LyricsClientProps {
-  track: LyricsTrack | null;
-  currentTime: number;
-  duration: number;
-  isPlaying: boolean;
-}
-
 const FALLBACK_LYRICS = 'Lirik tidak tersedia';
-const TIMESTAMP_REGEX = /^\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/;
+const LRC_TIMESTAMP_REGEX = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+const INTRO_GUARD_SECONDS = 0.3;
+const MAX_ADAPTIVE_OFFSET = 0.35;
+const OFFSET_SMOOTHING_FACTOR = 0.08;
 
 async function fetchLyrics(videoId: string): Promise<string> {
   if (!videoId) {
@@ -50,28 +43,33 @@ function parseTimestampedLyrics(rawLyrics: string, duration: number): LyricLine[
     .filter(Boolean);
 
   const timestamped = lines
-    .map((line) => {
-      const match = line.match(TIMESTAMP_REGEX);
-      if (!match) {
-        return null;
+    .flatMap((line) => {
+      const matches = Array.from(line.matchAll(LRC_TIMESTAMP_REGEX));
+
+      if (matches.length === 0) {
+        return [];
       }
 
-      const minutes = Number(match[1]);
-      const seconds = Number(match[2]);
-      const millisRaw = match[3] ?? '0';
-      const millis = Number(millisRaw.padEnd(3, '0').slice(0, 3));
-      const text = match[4]?.trim() || '';
-
+      const text = line.replace(LRC_TIMESTAMP_REGEX, '').trim();
       if (!text) {
-        return null;
+        return [];
       }
 
-      return {
-        time: minutes * 60 + seconds + millis / 1000,
-        text,
-      };
+      return matches
+        .map((match) => {
+          const minutes = Number(match[1] ?? 0);
+          const seconds = Number(match[2] ?? 0);
+          const fractionRaw = match[3] ?? '0';
+          const fraction = Number(`0.${fractionRaw}`);
+          const time = minutes * 60 + seconds + fraction;
+
+          return {
+            time,
+            text,
+          };
+        })
+        .filter((lineItem) => Number.isFinite(lineItem.time));
     })
-    .filter((line): line is LyricLine => Boolean(line))
     .sort((a, b) => a.time - b.time);
 
   if (timestamped.length > 0) {
@@ -94,17 +92,37 @@ function parseTimestampedLyrics(rawLyrics: string, duration: number): LyricLine[
 
 function findCurrentLyricIndex(lyrics: LyricLine[], currentTime: number): number {
   if (!lyrics.length) {
-    return 0;
+    return -1;
   }
 
-  const index = lyrics.findIndex(
-    (line, i) => currentTime >= line.time && currentTime < (lyrics[i + 1]?.time ?? Number.POSITIVE_INFINITY),
-  );
+  const firstLyricTime = lyrics[0]?.time ?? 0;
+  if (currentTime < firstLyricTime - INTRO_GUARD_SECONDS) {
+    return -1;
+  }
 
-  return index === -1 ? lyrics.length - 1 : index;
+  let low = 0;
+  let high = lyrics.length - 1;
+  let best = -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (lyrics[mid].time <= currentTime) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return best;
 }
 
-export default function LyricsClient({ track, currentTime, duration, isPlaying }: LyricsClientProps) {
+export default function LyricsClient() {
+  const track = usePlayerStore((state) => state.currentTrack);
+  const currentTime = usePlayerStore((state) => state.progress);
+  const duration = usePlayerStore((state) => state.duration);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+
   const [lyrics, setLyrics] = useState(FALLBACK_LYRICS);
   const [isLoading, setIsLoading] = useState(false);
   const lineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
@@ -137,16 +155,25 @@ export default function LyricsClient({ track, currentTime, duration, isPlaying }
   }, [track?.videoId]);
 
   const parsedLyrics = useMemo(() => parseTimestampedLyrics(lyrics, duration), [lyrics, duration]);
-
-  const currentLyricIndex = useMemo(() => {
-    if (!parsedLyrics.length) {
+  const displayTime = currentTime;
+  const adaptiveOffset = useMemo(() => {
+    const nearestIndex = findCurrentLyricIndex(parsedLyrics, displayTime);
+    if (nearestIndex < 0) {
       return 0;
     }
+    const delta = displayTime - parsedLyrics[nearestIndex].time;
+    const targetOffset = Math.max(Math.min(-delta * 0.15, MAX_ADAPTIVE_OFFSET), -MAX_ADAPTIVE_OFFSET);
+    return targetOffset * (1 - OFFSET_SMOOTHING_FACTOR);
+  }, [displayTime, parsedLyrics]);
 
-    return findCurrentLyricIndex(parsedLyrics, currentTime);
-  }, [currentTime, parsedLyrics]);
+  const syncedTime = displayTime + adaptiveOffset;
+  const currentLyricIndex = useMemo(() => findCurrentLyricIndex(parsedLyrics, syncedTime), [parsedLyrics, syncedTime]);
 
   useEffect(() => {
+    if (currentLyricIndex < 0) {
+      return;
+    }
+
     const activeLineRef = lineRefs.current[currentLyricIndex];
 
     if (!activeLineRef) {
@@ -160,12 +187,25 @@ export default function LyricsClient({ track, currentTime, duration, isPlaying }
   }, [currentLyricIndex]);
 
   useEffect(() => {
-    console.log('[lyrics-sync]', {
-      currentTime: Number(currentTime.toFixed(3)),
+    const lyricTime = currentLyricIndex >= 0 ? parsedLyrics[currentLyricIndex]?.time ?? 0 : 0;
+    const delta = currentLyricIndex >= 0 ? syncedTime - lyricTime : 0;
+    const roundedDelta = Number(delta.toFixed(3));
+
+    const payload = {
+      currentTime: Number(displayTime.toFixed(3)),
+      lyricTime: Number(lyricTime.toFixed(3)),
+      delta: roundedDelta,
       currentLyricIndex,
       isPlaying,
-    });
-  }, [currentTime, currentLyricIndex, isPlaying]);
+    };
+
+    if (Math.abs(roundedDelta) > 0.3) {
+      console.warn('[lyrics-sync:drift]', payload);
+      return;
+    }
+
+    console.log('[lyrics-sync]', payload);
+  }, [displayTime, currentLyricIndex, isPlaying, parsedLyrics, syncedTime]);
 
   return (
     <AnimatePresence mode="wait">
@@ -189,8 +229,8 @@ export default function LyricsClient({ track, currentTime, duration, isPlaying }
                 }}
                 className={`origin-center transition-all duration-300 ${
                   index === currentLyricIndex
-                    ? 'text-white font-bold scale-105'
-                    : 'text-gray-400'
+                    ? 'text-white font-bold scale-105 opacity-100'
+                    : 'text-gray-400 scale-100 opacity-70'
                 }`}
               >
                 {line.text}

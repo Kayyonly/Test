@@ -33,6 +33,7 @@ export function Player() {
   const [showLyrics, setShowLyrics] = useState(false);
   const playerRef = useRef<any>(null);
   const pauseRequestedRef = useRef(false);
+  const progressRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (currentTrack) {
@@ -104,17 +105,43 @@ export function Player() {
   });
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isPlaying) {
-      interval = setInterval(async () => {
-        if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-          const time = await playerRef.current.getCurrentTime();
+    if (!isPlaying) {
+      if (progressRafRef.current) {
+        cancelAnimationFrame(progressRafRef.current);
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const updateProgress = async () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+        const time = await playerRef.current.getCurrentTime();
+        if (!cancelled) {
           setProgress(time || 0);
         }
-      }, 200);
-    }
-    return () => clearInterval(interval);
+      }
+
+      progressRafRef.current = requestAnimationFrame(updateProgress);
+    };
+
+    progressRafRef.current = requestAnimationFrame(updateProgress);
+
+    return () => {
+      cancelled = true;
+      if (progressRafRef.current) {
+        cancelAnimationFrame(progressRafRef.current);
+      }
+    };
   }, [isPlaying, setProgress]);
+
+  useEffect(() => {
+    setProgress(0);
+  }, [currentTrack?.videoId, setProgress]);
 
   useEffect(() => {
     if (playerRef.current) {
@@ -336,12 +363,7 @@ export function Player() {
                 )}
                 {showLyrics ? (
                   <div className="flex-1 pb-8 z-10">
-                    <LyricsClient
-                      track={currentTrack}
-                      currentTime={progress}
-                      duration={duration}
-                      isPlaying={isPlaying}
-                    />
+                    <LyricsClient />
                   </div>
                 ) : (
                   <AnimatePresence mode="wait">
