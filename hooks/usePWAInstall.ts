@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -10,44 +10,64 @@ interface BeforeInstallPromptEvent extends Event {
   }>;
 }
 
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
 export function usePWAInstall() {
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [canInstall, setCanInstall] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [hasPrompt, setHasPrompt] = useState(false);
 
   useEffect(() => {
-    const displayModeQuery = window.matchMedia('(display-mode: standalone)');
+    const standaloneQuery = window.matchMedia('(display-mode: standalone)');
 
-    const syncInstalledState = () => {
-      const installed = displayModeQuery.matches;
-      setIsInstalled(installed);
-      if (installed) {
+    const syncPlatformState = () => {
+      const ua = window.navigator.userAgent.toLowerCase();
+      const iOS = /iphone|ipad|ipod/.test(ua);
+      const nav = window.navigator as NavigatorWithStandalone;
+      const standalone = standaloneQuery.matches || Boolean(nav.standalone);
+
+      setIsIOS(iOS);
+      setIsStandalone(standalone);
+
+      if (standalone) {
         deferredPromptRef.current = null;
-        setCanInstall(false);
+        setHasPrompt(false);
       }
     };
 
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       deferredPromptRef.current = event as BeforeInstallPromptEvent;
-      setCanInstall(!displayModeQuery.matches);
+      setHasPrompt(true);
+      syncPlatformState();
     };
 
-    syncInstalledState();
+    syncPlatformState();
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    displayModeQuery.addEventListener('change', syncInstalledState);
+    standaloneQuery.addEventListener('change', syncPlatformState);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      displayModeQuery.removeEventListener('change', syncInstalledState);
+      standaloneQuery.removeEventListener('change', syncPlatformState);
     };
   }, []);
 
+  useEffect(() => {
+    console.log({
+      hasPrompt,
+      isIOS,
+      isStandalone,
+    });
+  }, [hasPrompt, isIOS, isStandalone]);
+
   const installPWA = useCallback(async () => {
     const deferredPrompt = deferredPromptRef.current;
-    if (!deferredPrompt || isInstalled) {
-      return;
+    if (!deferredPrompt || isStandalone) {
+      return { status: 'manual' as const };
     }
 
     await deferredPrompt.prompt();
@@ -55,12 +75,26 @@ export function usePWAInstall() {
 
     if (choiceResult.outcome === 'accepted') {
       deferredPromptRef.current = null;
-      setCanInstall(false);
+      setHasPrompt(false);
+      return { status: 'accepted' as const };
     }
-  }, [isInstalled]);
 
-  return {
-    canInstall: canInstall && !isInstalled,
-    installPWA,
-  };
+  return { status: 'dismissed' as const };
+  }, [isStandalone]);
+
+  const showInstallButton = !isStandalone;
+  const requiresManualInstructions = showInstallButton && (!hasPrompt || isIOS);
+
+  return useMemo(
+    () => ({
+      canInstall: hasPrompt && showInstallButton,
+      hasPrompt,
+      isIOS,
+      isStandalone,
+      showInstallButton,
+      requiresManualInstructions,
+      installPWA,
+    }),
+    [hasPrompt, installPWA, isIOS, isStandalone, requiresManualInstructions, showInstallButton],
+  );
 }
