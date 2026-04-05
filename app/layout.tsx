@@ -5,6 +5,7 @@ import { Player } from '@/components/Player';
 import { AddToPlaylistModal } from '@/components/AddToPlaylistModal';
 import { PWARegister } from '@/components/PWARegister';
 import { BackgroundProvider } from '@/components/BackgroundProvider';
+import { PWAInstallButton } from '@/components/PWAInstallButton';
 
 export const metadata: Metadata = {
   title: 'Music App',
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
     title: 'Music App',
   },
   icons: {
-    apple: 'https://f.top4top.io/p_3733w0g4e0.jpg',
+    apple: '/icons/icon-192.png',
   },
 };
 
@@ -35,6 +36,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <PWARegister />
         {children}
         <Player />
+        <PWAInstallButton />
         <BottomNav />
         <AddToPlaylistModal />
       </body>
