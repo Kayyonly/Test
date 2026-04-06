@@ -1,14 +1,35 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
-import { ArrowLeft, Globe, Instagram, Twitter, Coffee, Download, Tv, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Globe, Instagram, Twitter, Coffee, Download, Tv, CheckCircle2, Share2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 export default function DeveloperPage() {
   const router = useRouter();
-  const { canInstall, installPWA } = usePWAInstall();
+  const { hasPrompt, isIOS, isStandalone, installPWA } = usePWAInstall();
+  const [showHowToInstall, setShowHowToInstall] = useState(false);
+
+  const helperText = isStandalone
+    ? 'Aplikasi ini sudah berjalan dalam mode terpasang (standalone).'
+    : isIOS
+      ? 'iOS: Tap Share → Add to Home Screen'
+      : hasPrompt
+        ? 'Perangkat ini mendukung install langsung.'
+        : 'Browser ini tidak memunculkan otomatis. Gunakan menu browser untuk Add to Home Screen.';
+
+  const handleInstallClick = async () => {
+    if (isStandalone) return;
+
+    if (hasPrompt) {
+      await installPWA();
+      return;
+    }
+
+    setShowHowToInstall(true);
+  };
 
   return (
     <main className="min-h-screen pb-24">
@@ -22,7 +43,7 @@ export default function DeveloperPage() {
       <div className="px-6 pt-6">
         <h2 className="text-[#4ADE80] text-sm font-medium mb-8">Lead Developer</h2>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col items-center text-center space-y-6"
@@ -32,10 +53,10 @@ export default function DeveloperPage() {
             <div className="absolute inset-0 bg-[#1A2E23] rounded-[40%_60%_70%_30%_/_40%_50%_60%_50%] animate-[blob_8s_ease-in-out_infinite] scale-110" />
             <div className="absolute inset-0 bg-[#224032] rounded-[60%_40%_30%_70%_/_50%_60%_40%_50%] animate-[blob_8s_ease-in-out_infinite_reverse] scale-105" />
             <div className="relative w-full h-full rounded-[50%_50%_40%_60%_/_60%_40%_50%_50%] overflow-hidden border-2 border-[#4ADE80]/20 z-10">
-              <Image 
-                src="https://f.top4top.io/p_3733w0g4e0.jpg" 
-                alt="Kayy Official" 
-                fill 
+              <Image
+                src="https://f.top4top.io/p_3733w0g4e0.jpg"
+                alt="Kayy Official"
+                fill
                 sizes="192px"
                 className="object-cover"
               />
@@ -72,7 +93,7 @@ export default function DeveloperPage() {
           </div>
 
           {/* Buy me a coffee */}
-          <a 
+          <a
             href="https://sociabuzz.com/kayyofficial"
             target="_blank"
             rel="noopener noreferrer"
@@ -87,18 +108,48 @@ export default function DeveloperPage() {
             </div>
           </a>
 
-          {/* Install PWA (optional) */}
-          {canInstall && (
-            <button
-              onClick={() => {
-                void installPWA();
-              }}
-              className="w-full max-w-sm flex items-center justify-center gap-3 bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white font-medium py-4 px-6 rounded-2xl transition-colors border border-white/5"
-            >
-              <Download className="w-5 h-5" />
-              <span>Install App</span>
-            </button>
-          )}
+          {/* Install PWA */}
+          <div className="w-full max-w-sm space-y-3">
+              <button
+                onClick={() => {
+                  void handleInstallClick();
+                }}
+                disabled={isStandalone}
+                className="w-full flex items-center justify-center gap-3 bg-[#1C1C1E] hover:bg-[#2C2C2E] disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-4 px-6 rounded-2xl transition-colors border border-white/5"
+              >
+                <Download className="w-5 h-5" />
+                <span>{isStandalone ? 'App Sudah Terpasang' : 'Install App'}</span>
+              </button>
+
+              <p className="text-xs text-white/60">{helperText}</p>
+
+              {!hasPrompt && !isStandalone && (
+                <button
+                  onClick={() => setShowHowToInstall((prev) => !prev)}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-xs text-white/75 hover:bg-white/[0.06] transition-colors"
+                >
+                  {showHowToInstall ? 'Sembunyikan cara install' : 'How to install'}
+                </button>
+              )}
+
+              {showHowToInstall && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left">
+                  {isIOS ? (
+                    <ol className="space-y-2 text-xs text-white/80">
+                      <li className="flex items-start gap-2"><span>1.</span><span>Tap <Share2 className="inline w-3.5 h-3.5" /> Share di Safari.</span></li>
+                      <li className="flex items-start gap-2"><span>2.</span><span>Pilih <strong>Add to Home Screen</strong>.</span></li>
+                      <li className="flex items-start gap-2"><span>3.</span><span>Tap <strong>Add</strong>.</span></li>
+                    </ol>
+                  ) : (
+                    <ol className="space-y-2 text-xs text-white/80">
+                      <li className="flex items-start gap-2"><span>1.</span><span>Buka menu browser (⋮ / ⋯).</span></li>
+                      <li className="flex items-start gap-2"><span>2.</span><span>Pilih <strong>Install app</strong> atau <strong>Add to Home Screen</strong>.</span></li>
+                      <li className="flex items-start gap-2"><span>3.</span><span>Konfirmasi install.</span></li>
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
         </motion.div>
       </div>
 
