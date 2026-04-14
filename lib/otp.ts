@@ -2,30 +2,30 @@ import { randomInt } from 'node:crypto';
 
 const OTP_TTL_MS = 15 * 60 * 1000;
 
-type OTPRecord = {
+export type OtpRecord = {
   email: string;
-  code: string;
-  expiredAt: Date;
+  otp: string;
+  expiresAt: number;
+  failedAttempts: number;
 };
 
-const otpTable = new Map<string, OTPRecord>();
+const otpTable = new Map<string, OtpRecord>();
 
 export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
 export function generateOtpCode() {
-  return randomInt(100000, 1000000).toString();
+  return String(randomInt(100000, 1000000));
 }
 
-export function saveOtp(email: string, code: string) {
+export function saveOtp(email: string, otp: string) {
   const normalizedEmail = normalizeEmail(email);
-  const expiredAt = new Date(Date.now() + OTP_TTL_MS);
-
-  const record: OTPRecord = {
+  const record: OtpRecord = {
     email: normalizedEmail,
-    code,
-    expiredAt,
+    otp,
+    expiresAt: Date.now() + OTP_TTL_MS,
+    failedAttempts: 0,
   };
 
   otpTable.set(normalizedEmail, record);
@@ -33,17 +33,22 @@ export function saveOtp(email: string, code: string) {
 }
 
 export function findOtpByEmail(email: string) {
+  return otpTable.get(normalizeEmail(email)) ?? null;
+}
+
+export function incrementOtpAttempts(email: string) {
   const normalizedEmail = normalizeEmail(email);
   const record = otpTable.get(normalizedEmail);
 
   if (!record) return null;
 
-  if (record.expiredAt.getTime() <= Date.now()) {
-    otpTable.delete(normalizedEmail);
-    return null;
-  }
+  const updated: OtpRecord = {
+    ...record,
+    failedAttempts: record.failedAttempts + 1,
+  };
 
-  return record;
+  otpTable.set(normalizedEmail, updated);
+  return updated;
 }
 
 export function removeOtp(email: string) {
