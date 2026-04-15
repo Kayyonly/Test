@@ -10,6 +10,7 @@ type SessionRecord = {
   expiresAt: number;
 };
 
+const sessionTable = new Map<string, SessionRecord>();
 type SessionPayload = {
   email: string;
   authenticated: true;
