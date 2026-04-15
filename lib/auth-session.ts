@@ -1,38 +1,84 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export const AUTH_COOKIE_NAME = 'vynra_session';
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const AUTH_COOKIE_NAME = 'session_token';
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const FALLBACK_SECRET = 'dev-only-secret-change-me';
 
 type SessionRecord = {
   email: string;
+  authenticated: true;
   expiresAt: number;
 };
 
-const sessionTable = new Map<string, SessionRecord>();
+type SessionPayload = {
+  email: string;
+  authenticated: true;
+  expiresAt: number;
+};
 
-export function createAuthSession(email: string) {
-  const id = randomUUID();
-  sessionTable.set(id, {
-    email: email.trim().toLowerCase(),
-    expiresAt: Date.now() + SESSION_TTL_MS,
-  });
-  return { id, maxAgeSeconds: Math.floor(SESSION_TTL_MS / 1000) };
+function getSessionSecret() {
+  return process.env.AUTH_SESSION_SECRET || process.env.NEXTAUTH_SECRET || FALLBACK_SECRET;
 }
 
-export function getSessionById(sessionId?: string) {
-  if (!sessionId) return null;
-  const session = sessionTable.get(sessionId);
-  if (!session) return null;
+function sign(payloadBase64: string) {
+  return createHmac('sha256', getSessionSecret()).update(payloadBase64).digest('base64url');
+}
 
-  if (session.expiresAt <= Date.now()) {
-    sessionTable.delete(sessionId);
+function encode(payload: SessionPayload) {
+  const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = sign(payloadBase64);
+  return `${payloadBase64}.${signature}`;
+}
+
+function decode(token: string) {
+  const [payloadBase64, signature] = token.split('.');
+
+  if (!payloadBase64 || !signature) return null;
+
+  const expectedSignature = sign(payloadBase64);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (signatureBuffer.length !== expectedBuffer.length) return null;
+
+  const safeMatch = timingSafeEqual(signatureBuffer, expectedBuffer);
+  if (!safeMatch) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString('utf8')) as SessionPayload;
+    if (!payload.email || payload.authenticated !== true || typeof payload.expiresAt !== 'number') return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function createAuthSession(email: string) {
+  const payload: SessionPayload = {
+    email: email.trim().toLowerCase(),
+    authenticated: true,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
+
+  return {
+    id: encode(payload),
+    maxAgeSeconds: Math.floor(SESSION_TTL_MS / 1000),
+  };
+}
+
+export function getSessionById(sessionId?: string): SessionRecord | null {
+  if (!sessionId) return null;
+
+  const payload = decode(sessionId);
+  if (!payload) return null;
+
+  if (payload.expiresAt <= Date.now()) {
     return null;
   }
 
-  return session;
+  return payload;
 }
 
-export function clearSession(sessionId?: string) {
-  if (!sessionId) return;
-  sessionTable.delete(sessionId);
+export function clearSession(_sessionId?: string) {
+  return;
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -10,6 +10,15 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+
+  useEffect(() => {
+    const nextPath = searchParams.get('next');
+    if (nextPath && nextPath.startsWith('/')) {
+      sessionStorage.setItem('vynra_auth_next', nextPath);
+    }
+  }, [searchParams]);
 
   const submitEmail = async (event: FormEvent) => {
     event.preventDefault();
