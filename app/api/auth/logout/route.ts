@@ -4,9 +4,7 @@ import { AUTH_COOKIE_NAME, clearSession } from '@/lib/auth-session';
 
 export async function POST() {
   const cookieStore = await cookies();
-  const sessionId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-  clearSession(sessionId);
+  clearSession();
   cookieStore.delete(AUTH_COOKIE_NAME);
 
   return NextResponse.json({ success: true });
