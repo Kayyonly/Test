@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import HomePageClient from '@/components/HomePageClient';
-import { AUTH_COOKIE_NAME, getSessionById } from '@/lib/auth-session';
+import { AUTH_COOKIE_NAME } from '@/lib/auth-constants';
+import { getSessionById } from '@/lib/auth-session';
 
 export default async function Page() {
   const cookieStore = await cookies();
