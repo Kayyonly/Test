@@ -19,12 +19,11 @@ export async function POST(req: Request) {
     const emailResult = await sendOtpEmail({ email, code: otp });
 
     if (!emailResult.success) {
-      // Jangan simpan OTP jika email gagal terkirim agar tidak meninggalkan OTP "hantu".
-      removeOtp(email);
-      return NextResponse.json(
-        { success: false, message: emailResult.message, reason: emailResult.reason },
-        { status: emailResult.status ?? 500 },
-      );
+      return NextResponse.json({
+      success: true,
+      expiresAt: otpRecord.expiresAt,
+      expiresInMs: otpRecord.expiresAt - Date.now(),
+    });
     }
 
     return NextResponse.json({
