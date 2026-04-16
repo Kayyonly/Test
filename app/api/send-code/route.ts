@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt } from 'crypto';
 import { NextResponse } from 'next/server';
 import { sendOtpEmail } from '@/lib/email';
 import { canSendOtp, markOtpSent, upsertOtp } from '@/lib/otp-store';

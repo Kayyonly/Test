@@ -59,8 +59,10 @@ export default function VerifyPage() {
       }
 
       setUser(email);
+      const nextPath = sessionStorage.getItem('vynra_auth_next');
       sessionStorage.removeItem('vynra_auth_email');
-      router.replace('/');
+      sessionStorage.removeItem('vynra_auth_next');
+      router.replace(nextPath && nextPath.startsWith('/') ? nextPath : '/');
       router.refresh();
     } catch (requestError) {
       console.error(requestError);

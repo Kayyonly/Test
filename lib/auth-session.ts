@@ -1,16 +1,19 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
-export const AUTH_COOKIE_NAME = 'vynra_session';
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+import { AUTH_COOKIE_NAME } from '@/lib/auth-constants';
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const FALLBACK_SECRET = 'dev-only-secret-change-me';
 
 type SessionRecord = {
   email: string;
+  authenticated: true;
   expiresAt: number;
 };
 
+const sessionTable = new Map<string, SessionRecord>();
 type SessionPayload = {
   email: string;
+  authenticated: true;
   expiresAt: number;
 };
 
@@ -44,7 +47,7 @@ function decode(token: string) {
 
   try {
     const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString('utf8')) as SessionPayload;
-    if (!payload.email || typeof payload.expiresAt !== 'number') return null;
+    if (!payload.email || payload.authenticated !== true || typeof payload.expiresAt !== 'number') return null;
     return payload;
   } catch {
     return null;
@@ -54,6 +57,7 @@ function decode(token: string) {
 export function createAuthSession(email: string) {
   const payload: SessionPayload = {
     email: email.trim().toLowerCase(),
+    authenticated: true,
     expiresAt: Date.now() + SESSION_TTL_MS,
   };
 

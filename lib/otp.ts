@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt } from 'crypto';
 
 const OTP_TTL_MS = 15 * 60 * 1000;
 
