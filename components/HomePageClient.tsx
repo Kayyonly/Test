@@ -178,7 +178,7 @@ export default function Home() {
           <Cast className="h-6 w-6" />
           <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
             <Image
-              src={user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&q=80&auto=format&fit=crop'}
+              src={user?.avatarUrl || 'https://files.catbox.moe/cjr2ez.png'}
               alt="User Profile"
               fill
               sizes="32px"
