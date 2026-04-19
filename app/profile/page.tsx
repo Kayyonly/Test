@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { AvatarImage } from '@/components/ui/AvatarImage';
+import Image from 'next/image';
 import { useAuthStore } from '@/store/authStore';
 
 export default function ProfilePage() {
@@ -86,6 +87,7 @@ export default function ProfilePage() {
           <div className="flex items-center gap-4">
             <div className="relative h-20 w-20 overflow-hidden rounded-full border border-white/10">
               <AvatarImage
+              <Image
                 src={avatarPreview || 'https://files.catbox.moe/cjr2ez.png'}
                 alt="Avatar preview"
                 fill

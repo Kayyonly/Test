@@ -6,7 +6,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { AvatarImage } from '@/components/ui/AvatarImage';
-
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/authStore';
 type HomeSidebarProps = {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
@@ -49,6 +52,8 @@ export function HomeSidebar({ open, setOpen }: HomeSidebarProps) {
           <div className="relative h-14 w-14 overflow-hidden rounded-full">
             <AvatarImage
               src={user?.avatarUrl || 'https://files.catbox.moe/cjr2ez.png'}
+            <Image
+              src={user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&q=80&auto=format&fit=crop'}
               alt="User avatar"
               fill
               sizes="56px"
