@@ -37,7 +37,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail }),
+        body: JSON.stringify({ email: normalizedEmail, password, mode: 'login' }),
       });
 
       const data = await res.json();
@@ -98,6 +98,12 @@ export default function LoginPage() {
         </label>
 
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
+
+        <p className="text-right text-sm">
+          <Link href="/auth/forgot-password" className="text-zinc-300 underline underline-offset-4 hover:text-white">
+            Lupa Password?
+          </Link>
+        </p>
 
         <button
           type="submit"
