@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { OTPInput } from '@/components/auth/OTPInput';
 import { AuthFrame } from '@/components/auth/AuthFrame';
 import { useAuthStore } from '@/store/authStore';
@@ -13,10 +14,12 @@ import {
 } from '@/lib/auth-client-storage';
 
 const RESEND_COOLDOWN = 30;
+const RESEND_UNTIL_KEY = 'vynra_resend_until';
 
 export default function VerifyPage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
 
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -27,33 +30,57 @@ export default function VerifyPage() {
 
   const isResendDisabled = useMemo(() => cooldown > 0 || resending, [cooldown, resending]);
 
+  const startCooldown = (seconds: number) => {
+    const safeSeconds = Math.max(0, seconds);
+    setCooldown(safeSeconds);
+    sessionStorage.setItem(RESEND_UNTIL_KEY, String(Date.now() + safeSeconds * 1000));
+  };
+
+  useEffect(() => {
+    console.log('LOGIN STATE:', isLoggedIn);
+  }, [isLoggedIn]);
+
   useEffect(() => {
     const savedEmail = getPendingEmail();
-
     if (!savedEmail) {
       router.replace('/auth');
       return;
     }
 
     setEmail(savedEmail);
-    setCooldown(RESEND_COOLDOWN);
+
+    const resendUntil = Number(sessionStorage.getItem(RESEND_UNTIL_KEY) ?? 0);
+    const remaining = Math.ceil((resendUntil - Date.now()) / 1000);
+    setCooldown(Math.max(0, remaining || RESEND_COOLDOWN));
   }, [router]);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
+    if (cooldown <= 0) {
+
+      sessionStorage.removeItem(RESEND_UNTIL_KEY);
+      return;
+    }
 
     const timer = setInterval(() => {
-      setCooldown((value) => (value <= 1 ? 0 : value - 1));
+      setCooldown((value) => {
+        const next = value <= 1 ? 0 : value - 1;
+        if (next === 0) {
+          sessionStorage.removeItem(RESEND_UNTIL_KEY);
+        }
+        return next;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
   }, [cooldown]);
 
-  const verifyOtp = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
+  const verifyOtp = async (event?: FormEvent) => {
+    event?.preventDefault();
+    if (loading || otp.length !== 6) return;
 
+    setError('');
     setLoading(true);
+
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
@@ -75,14 +102,14 @@ export default function VerifyPage() {
       router.refresh();
     } catch (requestError) {
       console.error(requestError);
-      setError('Terjadi gangguan jaringan. Coba lagi.');
+      setError('Terjadi gangguan jaringan, coba lagi');
     } finally {
       setLoading(false);
     }
   };
 
   const resendOtp = async () => {
-    if (!email || cooldown > 0) return;
+    if (!email || cooldown > 0 || resending) return;
 
     setError('');
     setResending(true);
@@ -96,14 +123,18 @@ export default function VerifyPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.message ?? 'Gagal kirim ulang OTP.');
+        if (typeof data?.retryAfterSeconds === 'number') {
+          startCooldown(data.retryAfterSeconds);
+        }
+        setError(data?.message ?? 'Gagal kirim ulang OTP');
         return;
       }
 
-      setCooldown(RESEND_COOLDOWN);
+      startCooldown(RESEND_COOLDOWN);
+      setOtp('');
     } catch (requestError) {
       console.error(requestError);
-      setError('Gagal kirim ulang OTP. Coba beberapa saat lagi.');
+      setError('Gagal kirim ulang OTP');
     } finally {
       setResending(false);
     }

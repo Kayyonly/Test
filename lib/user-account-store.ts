@@ -15,7 +15,7 @@ type PendingRegistration = {
   createdAt: number;
 };
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&q=80&auto=format&fit=crop';
+const DEFAULT_AVATAR = 'https://files.catbox.moe/cjr2ez.png';
 
 const accountTable = new Map<string, UserAccount>();
 const pendingRegistrationTable = new Map<string, PendingRegistration>();
