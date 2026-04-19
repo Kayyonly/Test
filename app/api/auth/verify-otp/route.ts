@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { AUTH_COOKIE_NAME } from '@/lib/auth-constants';
 import { createAuthSession } from '@/lib/auth-session';
 import { findOtpByEmail, incrementOtpAttempts, removeOtp } from '@/lib/otp';
+import { finalizeRegistration, getUserAccount } from '@/lib/user-account-store';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -30,13 +31,6 @@ export async function POST(req: Request) {
     const now = Date.now();
     const { otp: storedOtp, expiresAt } = otpRecord;
 
-    console.log({
-      email,
-      inputOtp,
-      storedOtp,
-      now,
-      expiresAt,
-    });
 
     if (now > expiresAt) {
       removeOtp(email);
@@ -58,6 +52,7 @@ export async function POST(req: Request) {
     }
 
     removeOtp(email);
+    finalizeRegistration(email);
 
     const { id, maxAgeSeconds } = createAuthSession(email);
     const cookieStore = await cookies();
@@ -69,7 +64,9 @@ export async function POST(req: Request) {
       maxAge: maxAgeSeconds,
     });
 
-    return NextResponse.json({ success: true, email });
+    const account = getUserAccount(email);
+
+    return NextResponse.json({ success: true, user: account });
   } catch (error) {
     console.error('[VERIFY_OTP_ROUTE_ERROR]', error);
     return NextResponse.json({ success: false, message: 'Gagal verifikasi OTP' }, { status: 500 });

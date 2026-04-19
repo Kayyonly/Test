@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Track, usePlayerStore } from '@/lib/store';
-import { Loader2, History, Cast, User, Play, MoreVertical } from 'lucide-react';
+import { History, Cast, Play, Menu, MoreVertical } from 'lucide-react';
 import Image from 'next/image';
+import { AvatarImage } from '@/components/ui/AvatarImage';
 import { HorizontalScroll } from '@/components/HorizontalScroll';
 import { MixedScroll } from '@/components/MixedScroll';
 import { CommunityPlaylistCard } from '@/components/CommunityPlaylistCard';
@@ -13,6 +14,8 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 
 import { HomeSkeleton } from '@/components/HomeSkeleton';
+import { useAuthStore } from '@/store/authStore';
+import { HomeSidebar } from '@/components/home/HomeSidebar';
 
 const pills = ['Chill', 'Focus', 'Commute', 'Gaming', 'Energize', 'Party', 'Feel good', 'Romance', 'Workout', 'Sleep', 'Sad', 'Happy', 'Nostalgia', 'Acoustic', 'Pop', 'Rock'];
 const FALLBACK_COVER = 'https://f.top4top.io/p_3733w0g4e0.jpg';
@@ -31,6 +34,9 @@ export default function Home() {
   const playTrack = usePlayerStore((state) => state.playTrack);
   const history = usePlayerStore((state) => state.history);
   const latestHistoryTrackId = history[0]?.track?.videoId;
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const fetchUser = useAuthStore((state) => state.fetchUser);
 
   useEffect(() => {
     if (!activeFilter) return;
@@ -59,6 +65,10 @@ export default function Home() {
     };
     fetchFilterData();
   }, [activeFilter]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
   useEffect(() => {
     const fetchHomeData = async () => {
@@ -148,15 +158,33 @@ export default function Home() {
 
   return (
     <main className="min-h-screen pt-6 pb-24">
-      <div className="flex items-center justify-between px-4 mb-4">
-        <h1 className="text-2xl font-bold text-white">Beranda</h1>
+      <HomeSidebar open={isSidebarOpen} setOpen={setIsSidebarOpen} />
+
+      <div className="mb-4 flex items-center justify-between px-4">
+        <div className="flex items-center gap-3">
+          <button
+            aria-label="Open navigation menu"
+            onClick={() => setIsSidebarOpen(true)}
+            className="rounded-xl border border-white/10 bg-white/5 p-2 text-white transition hover:bg-white/10"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <h1 className="text-2xl font-bold text-white">Beranda</h1>
+        </div>
+
         <div className="flex items-center gap-4 text-white/80">
-          <Link href="/history" className="hover:text-white transition-colors">
-            <History className="w-6 h-6" />
+          <Link href="/history" className="transition-colors hover:text-white">
+            <History className="h-6 w-6" />
           </Link>
-          <Cast className="w-6 h-6" />
-          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center relative">
-            <Image src="https://f.top4top.io/p_3733w0g4e0.jpg" alt="Developer Profile" fill sizes="32px" className="object-cover" />
+          <Cast className="h-6 w-6" />
+          <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
+            <AvatarImage
+              src={user?.avatarUrl || 'https://files.catbox.moe/cjr2ez.png'}
+              alt="User Profile"
+              fill
+              sizes="32px"
+              className="object-cover"
+            />
           </div>
         </div>
       </div>
