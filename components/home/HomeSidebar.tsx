@@ -48,7 +48,7 @@ export function HomeSidebar({ open, setOpen }: HomeSidebarProps) {
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <div className="relative h-14 w-14 overflow-hidden rounded-full">
             <Image
-              src={user?.avatarUrl || 'https://files.catbox.moe/cjr2ez.png'}
+              src={user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&q=80&auto=format&fit=crop'}
               alt="User avatar"
               fill
               sizes="56px"
