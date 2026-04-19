@@ -87,6 +87,7 @@ export default function ProfilePage() {
             <div className="relative h-20 w-20 overflow-hidden rounded-full border border-white/10">
               <Image
                 src={avatarPreview || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&q=80&auto=format&fit=crop'}
+                src={avatarPreview || 'https://files.catbox.moe/cjr2ez.png'}
                 alt="Avatar preview"
                 fill
                 sizes="80px"
