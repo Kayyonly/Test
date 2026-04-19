@@ -1,4 +1,4 @@
-import AuthClient from './AuthClient';
+import AuthWelcomeClient from './AuthWelcomeClient';
 
 type AuthPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -7,7 +7,7 @@ type AuthPageProps = {
 export default async function AuthPage({ searchParams }: AuthPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const nextParam = resolvedSearchParams.next;
-  const nextPath = typeof nextParam === 'string' ? nextParam : undefined;
+  const nextPath = typeof nextParam === 'string' && nextParam.startsWith('/') ? nextParam : undefined;
 
-  return <AuthClient nextPath={nextPath} />;
+  return <AuthWelcomeClient nextPath={nextPath} />;
 }

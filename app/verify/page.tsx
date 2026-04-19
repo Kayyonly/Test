@@ -3,7 +3,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { OTPInput } from '@/components/auth/OTPInput';
+import { AuthFrame } from '@/components/auth/AuthFrame';
 import { useAuthStore } from '@/store/authStore';
+import {
+  clearPendingEmail,
+  clearPendingNextPath,
+  getPendingEmail,
+  getPendingNextPath,
+} from '@/lib/auth-client-storage';
 
 const RESEND_COOLDOWN = 30;
 
@@ -21,7 +28,8 @@ export default function VerifyPage() {
   const isResendDisabled = useMemo(() => cooldown > 0 || resending, [cooldown, resending]);
 
   useEffect(() => {
-    const savedEmail = sessionStorage.getItem('vynra_auth_email');
+    const savedEmail = getPendingEmail();
+
     if (!savedEmail) {
       router.replace('/auth');
       return;
@@ -33,6 +41,7 @@ export default function VerifyPage() {
 
   useEffect(() => {
     if (cooldown <= 0) return;
+
     const timer = setInterval(() => {
       setCooldown((value) => (value <= 1 ? 0 : value - 1));
     }, 1000);
@@ -54,19 +63,19 @@ export default function VerifyPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.message ?? 'Verifikasi gagal');
+        setError(data?.message ?? 'Verifikasi gagal. Pastikan kode OTP benar.');
         return;
       }
 
-      setUser(email);
-      const nextPath = sessionStorage.getItem('vynra_auth_next');
-      sessionStorage.removeItem('vynra_auth_email');
-      sessionStorage.removeItem('vynra_auth_next');
-      router.replace(nextPath && nextPath.startsWith('/') ? nextPath : '/');
+      setUser(data?.user ?? email);
+      const nextPath = getPendingNextPath();
+      clearPendingEmail();
+      clearPendingNextPath();
+      router.replace(nextPath || '/');
       router.refresh();
     } catch (requestError) {
       console.error(requestError);
-      setError('Terjadi gangguan jaringan');
+      setError('Terjadi gangguan jaringan. Coba lagi.');
     } finally {
       setLoading(false);
     }
@@ -77,6 +86,7 @@ export default function VerifyPage() {
 
     setError('');
     setResending(true);
+
     try {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
@@ -86,50 +96,42 @@ export default function VerifyPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.message ?? 'Gagal kirim ulang OTP');
+        setError(data?.message ?? 'Gagal kirim ulang OTP.');
         return;
       }
 
       setCooldown(RESEND_COOLDOWN);
-      setOtp('');
     } catch (requestError) {
       console.error(requestError);
-      setError('Gagal kirim ulang OTP');
+      setError('Gagal kirim ulang OTP. Coba beberapa saat lagi.');
     } finally {
       setResending(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
-      <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col items-center justify-center">
-        <div className="w-full rounded-3xl border border-white/10 bg-zinc-950 p-6 shadow-2xl shadow-black/50">
-          <p className="text-center text-sm text-zinc-400">Verifikasi ke {email}</p>
-          <h1 className="mt-2 text-center text-3xl font-semibold">Enter OTP</h1>
+    <AuthFrame title="Enter OTP" description={email ? `Kode dikirim ke ${email}` : 'Kode dikirim ke email kamu'}>
+      <form onSubmit={verifyOtp} className="space-y-5">
+        <OTPInput value={otp} onChange={setOtp} disabled={loading} />
 
-          <form onSubmit={verifyOtp} className="mt-8 space-y-5">
-            <OTPInput value={otp} onChange={setOtp} disabled={loading} />
+        {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
 
-            {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
+        <button
+          type="submit"
+          disabled={loading || otp.length !== 6}
+          className="w-full rounded-2xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? 'Memverifikasi...' : 'Verify & Continue'}
+        </button>
+      </form>
 
-            <button
-              type="submit"
-              disabled={loading || otp.length !== 6}
-              className="w-full rounded-xl bg-white py-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? 'Verifying...' : 'Verify & Login'}
-            </button>
-          </form>
-
-          <button
-            onClick={resendOtp}
-            disabled={isResendDisabled}
-            className="mt-4 w-full text-sm text-zinc-300 disabled:opacity-50"
-          >
-            {cooldown > 0 ? `Resend OTP in ${cooldown}s` : 'Resend OTP'}
-          </button>
-        </div>
-      </div>
-    </main>
+      <button
+        onClick={resendOtp}
+        disabled={isResendDisabled}
+        className="mt-4 w-full text-sm text-zinc-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {cooldown > 0 ? `Kirim ulang OTP dalam ${cooldown}s` : 'Kirim ulang OTP'}
+      </button>
+    </AuthFrame>
   );
 }
