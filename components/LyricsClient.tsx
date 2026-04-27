@@ -22,9 +22,9 @@ interface LyricsClientProps {
 
 const FALLBACK_LYRICS = 'Lirik tidak tersedia';
 const LRC_TIMESTAMP_REGEX = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
-const INTRO_GUARD_SECONDS = 0.3;
-const MAX_ADAPTIVE_OFFSET = 0.35;
-const OFFSET_SMOOTHING_FACTOR = 0.08;
+const INTRO_GUARD_SECONDS = 0.2;
+const OFFSET = 0.1;
+const SCROLL_DELAY_MS = 90;
 
 async function fetchLyrics(videoId: string): Promise<string> {
   if (!videoId) {
@@ -106,8 +106,8 @@ function findCurrentLyricIndex(lyrics: LyricLine[], currentTime: number): number
     return -1;
   }
 
-  const firstLyricTime = lyrics[0]?.time ?? 0;
-  if (currentTime < firstLyricTime - INTRO_GUARD_SECONDS) {
+  const firstTime = lyrics[0]?.time ?? 0;
+  if (currentTime < firstTime - INTRO_GUARD_SECONDS) {
     return -1;
   }
 
@@ -130,12 +130,21 @@ function findCurrentLyricIndex(lyrics: LyricLine[], currentTime: number): number
 
 export default function LyricsClient() {
   const track = usePlayerStore((state) => state.currentTrack);
-  const currentTime = usePlayerStore((state) => state.progress);
+  const playerTime = usePlayerStore((state) => state.progress);
   const duration = usePlayerStore((state) => state.duration);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const [lyrics, setLyrics] = useState(FALLBACK_LYRICS);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
   const lineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
+  const lyricLoopRafRef = useRef<number | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visualTimeRef = useRef(0);
+  const storeTimeRef = useRef(0);
+  const storeTimeStampRef = useRef(0);
+  const activeIndexRef = useRef(-1);
+  const activeProgressRef = useRef(0);
+  const logCounterRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -165,22 +174,95 @@ export default function LyricsClient() {
   }, [track?.videoId]);
 
   const parsedLyrics = useMemo(() => parseTimestampedLyrics(lyrics, duration), [lyrics, duration]);
-  const displayTime = currentTime;
-  const adaptiveOffset = useMemo(() => {
-    const nearestIndex = findCurrentLyricIndex(parsedLyrics, displayTime);
-    if (nearestIndex < 0) {
-      return 0;
-    }
-    const delta = displayTime - parsedLyrics[nearestIndex].time;
-    const targetOffset = Math.max(Math.min(-delta * 0.15, MAX_ADAPTIVE_OFFSET), -MAX_ADAPTIVE_OFFSET);
-    return targetOffset * (1 - OFFSET_SMOOTHING_FACTOR);
-  }, [displayTime, parsedLyrics]);
-
-  const syncedTime = displayTime + adaptiveOffset;
-  const currentLyricIndex = useMemo(() => findCurrentLyricIndex(parsedLyrics, syncedTime), [parsedLyrics, syncedTime]);
+  const firstLyricTime = parsedLyrics[0]?.time ?? 0;
+  const shouldHideDuringIntro = playerTime + OFFSET < firstLyricTime - INTRO_GUARD_SECONDS;
 
   useEffect(() => {
-    if (currentLyricIndex < 0) {
+    storeTimeRef.current = playerTime;
+    storeTimeStampRef.current = performance.now();
+    if (!isPlaying) {
+      visualTimeRef.current = playerTime;
+    }
+  }, [isPlaying, playerTime]);
+
+  useEffect(() => {
+    if (lyricLoopRafRef.current) {
+      cancelAnimationFrame(lyricLoopRafRef.current);
+    }
+
+    const updateLyrics = () => {
+      const now = performance.now();
+      const elapsed = isPlaying ? (now - storeTimeStampRef.current) / 1000 : 0;
+      const projectedTime = storeTimeRef.current + elapsed;
+      const boundedTime = duration > 0 ? Math.min(projectedTime, duration) : projectedTime;
+      const syncedTime = boundedTime + OFFSET;
+
+      visualTimeRef.current = syncedTime;
+
+      const nextIndex = findCurrentLyricIndex(parsedLyrics, syncedTime);
+      if (nextIndex !== activeIndexRef.current) {
+        activeIndexRef.current = nextIndex;
+        setCurrentLyricIndex(nextIndex);
+      }
+
+      if (nextIndex >= 0) {
+        const currentLine = parsedLyrics[nextIndex];
+        const nextLine = parsedLyrics[nextIndex + 1];
+        const range = Math.max((nextLine?.time ?? currentLine.time + 2) - currentLine.time, 0.001);
+        const progress = Math.min(Math.max((syncedTime - currentLine.time) / range, 0), 1);
+        activeProgressRef.current = progress;
+      } else {
+        activeProgressRef.current = 0;
+      }
+
+      lineRefs.current.forEach((lineRef, index) => {
+        if (!lineRef) {
+          return;
+        }
+
+        const distance = activeIndexRef.current >= 0 ? Math.abs(index - activeIndexRef.current) : 99;
+        const isActive = index === activeIndexRef.current;
+        const isNear = distance <= 1;
+
+        const scale = isActive ? 1 + activeProgressRef.current * 0.05 : isNear ? 1.01 : 1;
+        const opacity = isActive ? 1 : isNear ? 0.75 : 0.4;
+        const translateY = isActive ? -4 * activeProgressRef.current : 0;
+
+        lineRef.style.opacity = String(opacity);
+        lineRef.style.transform = `translate3d(0, ${translateY}px, 0) scale(${scale})`;
+        lineRef.style.filter = isActive ? 'blur(0px)' : 'blur(0.6px)';
+        lineRef.style.setProperty('--karaoke-progress', `${Math.round((isActive ? activeProgressRef.current : 0) * 100)}%`);
+      });
+
+      if (nextIndex >= 0 && logCounterRef.current % 20 === 0) {
+        const lyricTime = parsedLyrics[nextIndex]?.time ?? 0;
+        const payload = {
+          currentTime: Number(boundedTime.toFixed(3)),
+          progress: Number(activeProgressRef.current.toFixed(3)),
+          lyricTime: Number(lyricTime.toFixed(3)),
+          delay: Number((boundedTime - lyricTime).toFixed(3)),
+        };
+        if (Math.abs(payload.delay) > 0.2) {
+          console.warn('[lyrics-sync:drift]', payload);
+        } else {
+          console.log('[lyrics-sync]', payload);
+        }
+      }
+      logCounterRef.current += 1;
+      lyricLoopRafRef.current = requestAnimationFrame(updateLyrics);
+    };
+
+    lyricLoopRafRef.current = requestAnimationFrame(updateLyrics);
+
+    return () => {
+      if (lyricLoopRafRef.current) {
+        cancelAnimationFrame(lyricLoopRafRef.current);
+      }
+    };
+  }, [duration, isPlaying, parsedLyrics]);
+
+  useEffect(() => {
+    if (currentLyricIndex < 0 || shouldHideDuringIntro) {
       return;
     }
 
@@ -190,32 +272,23 @@ export default function LyricsClient() {
       return;
     }
 
-    activeLineRef.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    });
-  }, [currentLyricIndex]);
-
-  useEffect(() => {
-    const lyricTime = currentLyricIndex >= 0 ? parsedLyrics[currentLyricIndex]?.time ?? 0 : 0;
-    const delta = currentLyricIndex >= 0 ? syncedTime - lyricTime : 0;
-    const roundedDelta = Number(delta.toFixed(3));
-
-    const payload = {
-      currentTime: Number(displayTime.toFixed(3)),
-      lyricTime: Number(lyricTime.toFixed(3)),
-      delta: roundedDelta,
-      currentLyricIndex,
-      isPlaying,
-    };
-
-    if (Math.abs(roundedDelta) > 0.3) {
-      console.warn('[lyrics-sync:drift]', payload);
-      return;
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
 
-    console.log('[lyrics-sync]', payload);
-  }, [displayTime, currentLyricIndex, isPlaying, parsedLyrics, syncedTime]);
+    scrollTimeoutRef.current = setTimeout(() => {
+      activeLineRef.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, SCROLL_DELAY_MS);
+
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [currentLyricIndex, shouldHideDuringIntro]);
 
   return (
     <AnimatePresence mode="wait">
@@ -229,6 +302,8 @@ export default function LyricsClient() {
       >
         {isLoading ? (
           <div className="text-sm text-white/60">Memuat lirik...</div>
+        ) : shouldHideDuringIntro ? (
+          <div className="text-sm text-white/40">♪ Intro...</div>
         ) : (
           <div className="space-y-3 text-base leading-7 whitespace-pre-wrap">
             {parsedLyrics.map((line, index) => (
@@ -237,13 +312,22 @@ export default function LyricsClient() {
                 ref={(element) => {
                   lineRefs.current[index] = element;
                 }}
-                className={`origin-center transition-all duration-300 ${
-                  index === currentLyricIndex
-                    ? 'text-white font-bold scale-105 opacity-100'
-                    : 'text-gray-400 scale-100 opacity-70'
+                className={`group relative origin-center transition-all duration-300 ease-out will-change-transform ${
+                  index === currentLyricIndex ? 'font-bold' : 'font-medium'
                 }`}
+                style={{
+                  transform: 'translate3d(0, 0, 0) scale(1)',
+                  opacity: 0.4,
+                }}
               >
-                {line.text}
+                <span className="relative z-10 text-gray-400">{line.text}</span>
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 z-20 overflow-hidden text-white"
+                  style={{ width: 'var(--karaoke-progress, 0%)' }}
+                >
+                  {line.text}
+                </span>
               </p>
             ))}
           </div>
